@@ -1,0 +1,45 @@
+{
+    "pipeline": "leg_deformity",
+    "version": "0.1.0",
+
+    "reconstruction": {
+        "model": "amb3r",
+        "max_images": 4,
+        "resolution": [518, 392],
+        "conf_threshold": 0.0,
+        "comment": "AMB3R uses VGGT as frontend + PointTransformerV3 backend for metric-scale 3D"
+    },
+
+    "pose_estimation": {
+        "model": "human",
+        "comment": "Options: human (RTMPose-m), vitpose, vitpose-l, vitpose-h, wholebody",
+        "min_keypoint_score": 0.3,
+        "keypoints": "coco_17"
+    },
+
+    "calibration": {
+        "aruco_dict_type": "4x4_50",
+        "marker_size_cm": null,
+        "comment": "Set marker_size_cm to the real-world side length of your printed ArUco marker"
+    },
+
+    "postprocessing": {
+        "statistical_outlier_nb": 20,
+        "statistical_outlier_std": 2.0,
+        "poisson_depth": 9,
+        "density_quantile": 0.1
+    },
+
+    "clinical_thresholds": {
+        "hka_normal_range_deg": 3.0,
+        "hka_mild_deg": 5.0,
+        "hka_moderate_deg": 10.0,
+        "leg_length_discrepancy_threshold_cm": 1.0,
+        "recurvatum_threshold_deg": 5.0
+    },
+
+    "viewer": {
+        "port": 8080,
+        "default_point_size": 2.0
+    }
+}

@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leg Deformity Assessment - 3D Viewer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+        #container { width: 100vw; height: 100vh; position: relative; }
+        canvas { display: block; }
+
+        /* Top toolbar */
+        #toolbar {
+            position: absolute; top: 0; left: 0; right: 0;
+            background: rgba(16, 16, 40, 0.9);
+            padding: 8px 16px;
+            display: flex; align-items: center; gap: 16px;
+            border-bottom: 1px solid #333;
+            z-index: 100; flex-wrap: wrap;
+        }
+        #toolbar h1 { font-size: 16px; font-weight: 600; color: #7eb8ff; }
+        .toolbar-group {
+            display: flex; align-items: center; gap: 8px;
+            padding: 0 12px; border-left: 1px solid #444;
+        }
+        .toolbar-btn {
+            background: #2a2a4a; border: 1px solid #444; color: #ccc;
+            padding: 4px 12px; border-radius: 4px; cursor: pointer;
+            font-size: 13px; transition: all 0.2s;
+        }
+        .toolbar-btn:hover { background: #3a3a6a; color: #fff; }
+        .toolbar-btn.active { background: #4a4a8a; border-color: #7eb8ff; color: #7eb8ff; }
+        select.toolbar-select {
+            background: #2a2a4a; border: 1px solid #444; color: #ccc;
+            padding: 4px 8px; border-radius: 4px; font-size: 13px;
+        }
+        label { font-size: 13px; color: #aaa; }
+
+        /* Side panel */
+        #side-panel {
+            position: absolute; top: 42px; right: 0; bottom: 0;
+            width: 340px; background: rgba(16, 16, 40, 0.95);
+            border-left: 1px solid #333; overflow-y: auto;
+            padding: 16px; z-index: 90;
+            transition: transform 0.3s;
+        }
+        #side-panel.hidden { transform: translateX(100%); }
+        #side-panel h2 { font-size: 14px; color: #7eb8ff; margin: 12px 0 8px; }
+        #side-panel h2:first-child { margin-top: 0; }
+        .measurement-row {
+            display: flex; justify-content: space-between;
+            padding: 4px 0; font-size: 13px; border-bottom: 1px solid #222;
+        }
+        .measurement-row .label { color: #888; }
+        .measurement-row .value { color: #e0e0e0; font-weight: 500; }
+        .flag { background: #442222; border: 1px solid #884444; padding: 6px 10px;
+                border-radius: 4px; font-size: 12px; margin: 4px 0; color: #ff8888; }
+        .flag.normal { background: #224422; border-color: #448844; color: #88ff88; }
+        .pose-img { width: 100%; border-radius: 4px; margin: 4px 0; cursor: pointer; }
+        .pose-img:hover { opacity: 0.8; }
+
+        /* Measurement overlay */
+        #measurement-display {
+            position: absolute; bottom: 16px; left: 16px;
+            background: rgba(16, 16, 40, 0.9); border: 1px solid #444;
+            padding: 8px 16px; border-radius: 6px; font-size: 13px;
+            z-index: 100; display: none;
+        }
+
+        /* Loading overlay */
+        #loading {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(26, 26, 46, 0.95); display: flex;
+            align-items: center; justify-content: center;
+            flex-direction: column; z-index: 200;
+        }
+        #loading.hidden { display: none; }
+        #loading-text { margin-top: 16px; font-size: 14px; color: #aaa; }
+        .spinner {
+            width: 40px; height: 40px; border: 3px solid #333;
+            border-top: 3px solid #7eb8ff; border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Image modal */
+        #img-modal {
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.9); z-index: 300; cursor: pointer;
+            align-items: center; justify-content: center;
+        }
+        #img-modal.show { display: flex; }
+        #img-modal img { max-width: 90%; max-height: 90%; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <!-- Loading overlay -->
+        <div id="loading">
+            <div class="spinner"></div>
+            <div id="loading-text">Connecting to server...</div>
+        </div>
+
+        <!-- Top toolbar -->
+        <div id="toolbar">
+            <h1>Leg Deformity 3D Viewer</h1>
+            <div class="toolbar-group">
+                <label>Point Cloud:</label>
+                <select class="toolbar-select" id="ply-select"></select>
+            </div>
+            <div class="toolbar-group">
+                <label>Point Size:</label>
+                <input type="range" id="point-size" min="0.5" max="10" step="0.5" value="3">
+                <span id="point-size-val">3.0</span>
+            </div>
+            <div class="toolbar-group">
+                <button class="toolbar-btn" id="btn-measure" title="Distance measurement (click 2 points)">Measure</button>
+                <button class="toolbar-btn" id="btn-angle" title="Angle measurement (click 3 points)">Angle</button>
+                <button class="toolbar-btn" id="btn-reset-view">Reset View</button>
+            </div>
+            <div class="toolbar-group">
+                <button class="toolbar-btn" id="btn-toggle-panel">Panel</button>
+                <button class="toolbar-btn" id="btn-bg-color">BG Color</button>
+            </div>
+        </div>
+
+        <!-- Side panel for measurements -->
+        <div id="side-panel">
+            <h2>Clinical Measurements</h2>
+            <div id="measurements-content">
+                <p style="color:#666; font-size:13px;">Loading...</p>
+            </div>
+            <h2>Pose Visualizations</h2>
+            <div id="pose-images">
+                <p style="color:#666; font-size:13px;">Loading...</p>
+            </div>
+            <h2>Debug Images</h2>
+            <div id="debug-images">
+                <p style="color:#666; font-size:13px;">Loading...</p>
+            </div>
+            <h2>Interactive Measurements</h2>
+            <div id="interactive-measurements">
+                <p style="color:#666; font-size:13px;">Use Measure/Angle tools on the point cloud.</p>
+            </div>
+        </div>
+
+        <!-- Measurement display -->
+        <div id="measurement-display"></div>
+    </div>
+
+    <!-- Image modal -->
+    <div id="img-modal" onclick="this.classList.remove('show')">
+        <img id="img-modal-src" src="">
+    </div>
+
+    <!-- Three.js from CDN (r128 - stable global THREE build) -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/PLYLoader.js"></script>
+    <script>
+        // ─── Scene Setup ─────────────────────────────────────────────
+        const container = document.getElementById('container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 100);
+        camera.position.set(0, 0.5, 2);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.1;
+
+        const grid = new THREE.GridHelper(5, 50, 0x333366, 0x222244);
+        scene.add(grid);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+
+        // ─── State ───────────────────────────────────────────────────
+        let pointCloud = null;
+        let measureMode = null;
+        let measurePoints = [];
+        let measureMarkers = [];
+        let measureLines = [];
+        const raycaster = new THREE.Raycaster();
+        raycaster.params.Points.threshold = 0.01;
+        const mouse = new THREE.Vector2();
+        const bgColors = [0x1a1a2e, 0x000000, 0x222222, 0xffffff];
+        let bgIndex = 0;
+        let allFiles = [];
+
+        // ─── Auto-load from server ───────────────────────────────────
+        async function init() {
+            const loadingText = document.getElementById('loading-text');
+
+            try {
+                // 1. Get file list
+                loadingText.textContent = 'Fetching file list...';
+                const filesResp = await fetch('/api/files');
+                allFiles = await filesResp.json();
+                console.log('Files:', allFiles);
+
+                // 2. Find available PLY files
+                const plyFiles = allFiles.filter(f => f.endsWith('.ply'));
+                const select = document.getElementById('ply-select');
+                select.innerHTML = '';
+
+                // 3. Auto-load measurements first (fast, small JSON)
+                loadingText.textContent = 'Loading measurements...';
+                try {
+                    const measResp = await fetch('/api/measurements');
+                    if (measResp.ok) {
+                        const measData = await measResp.json();
+                        if (!measData.error) {
+                            displayMeasurements(measData);
+                        } else {
+                            document.getElementById('measurements-content').innerHTML =
+                                '<p style="color:#666; font-size:13px;">No measurements available.</p>';
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Measurements load failed:', e);
+                    document.getElementById('measurements-content').innerHTML =
+                        '<p style="color:#666; font-size:13px;">Could not load measurements.</p>';
+                }
+
+                // 4. Auto-load pose visualization images
+                const visImages = allFiles.filter(f =>
+                    f.startsWith('pose/vis/') &&
+                    (f.endsWith('.jpg') || f.endsWith('.jpeg') || f.endsWith('.png'))
+                );
+                const poseDiv = document.getElementById('pose-images');
+                if (visImages.length > 0) {
+                    poseDiv.innerHTML = visImages.map(f =>
+                        `<img class="pose-img" src="/api/file/${f}" title="${f.split('/').pop()}" onclick="showModal(this.src)">`
+                    ).join('');
+                } else {
+                    poseDiv.innerHTML = '<p style="color:#666; font-size:13px;">No pose visualizations found.</p>';
+                }
+
+                // 4b. Auto-load debug images
+                const debugImages = allFiles.filter(f =>
+                    f.startsWith('debug/') &&
+                    (f.endsWith('.jpg') || f.endsWith('.jpeg') || f.endsWith('.png'))
+                );
+                const debugDiv = document.getElementById('debug-images');
+                if (debugImages.length > 0) {
+                    debugDiv.innerHTML = debugImages.map(f =>
+                        `<p style="color:#888; font-size:11px; margin:2px 0;">${f.split('/').pop()}</p>` +
+                        `<img class="pose-img" src="/api/file/${f}" title="${f}" onclick="showModal(this.src)">`
+                    ).join('');
+                } else {
+                    debugDiv.innerHTML = '<p style="color:#666; font-size:13px;">No debug images yet. Run pipeline to generate.</p>';
+                }
+
+                // 5. Setup PLY selector
+                if (plyFiles.length === 0) {
+                    select.innerHTML = '<option>No PLY files found</option>';
+                    loadingText.textContent = 'No point cloud files found. Run the full pipeline (without --skip_3d).';
+                    // Still hide loading since measurements/images are shown
+                    document.getElementById('loading').classList.add('hidden');
+                    return;
+                }
+
+                plyFiles.forEach(f => {
+                    const opt = document.createElement('option');
+                    opt.value = f;
+                    opt.textContent = f;
+                    select.appendChild(opt);
+                });
+
+                // Auto-select best PLY
+                const priority = [
+                    'postprocessed/point_cloud_clean.ply',
+                    'reconstruction/point_cloud.ply',
+                    'postprocessed/surface_mesh.ply',
+                    'reconstruction/point_cloud_front.ply',
+                ];
+                let bestPly = plyFiles[0];
+                for (const p of priority) {
+                    if (plyFiles.includes(p)) { bestPly = p; break; }
+                }
+                select.value = bestPly;
+
+                // 6. Load PLY with progress
+                loadingText.textContent = 'Downloading point cloud: ' + bestPly + ' ...';
+                console.log('Loading PLY:', bestPly);
+
+                const resp = await fetch('/api/file/' + bestPly);
+                if (!resp.ok) throw new Error('Failed to fetch PLY: ' + resp.status);
+
+                const contentLength = resp.headers.get('content-length');
+                const total = contentLength ? parseInt(contentLength) : 0;
+                const reader = resp.body.getReader();
+                const chunks = [];
+                let received = 0;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    chunks.push(value);
+                    received += value.length;
+                    if (total > 0) {
+                        const pct = Math.round((received / total) * 100);
+                        loadingText.textContent = `Downloading ${bestPly.split('/').pop()}: ${pct}% (${(received/1024/1024).toFixed(1)}MB)`;
+                    } else {
+                        loadingText.textContent = `Downloading: ${(received/1024/1024).toFixed(1)}MB...`;
+                    }
+                }
+
+                // Combine chunks into ArrayBuffer
+                const blob = new Blob(chunks);
+                const buffer = await blob.arrayBuffer();
+
+                loadingText.textContent = 'Parsing point cloud...';
+                console.log('Parsing PLY buffer, size:', buffer.byteLength);
+
+                const loader = new THREE.PLYLoader();
+                const geometry = loader.parse(buffer);
+                geometry.computeBoundingBox();
+
+                const center = new THREE.Vector3();
+                geometry.boundingBox.getCenter(center);
+                geometry.translate(-center.x, -center.y, -center.z);
+
+                if (pointCloud) scene.remove(pointCloud);
+
+                const material = new THREE.PointsMaterial({
+                    size: parseFloat(document.getElementById('point-size').value) * 0.001,
+                    vertexColors: geometry.hasAttribute('color'),
+                    sizeAttenuation: true,
+                });
+
+                pointCloud = new THREE.Points(geometry, material);
+                scene.add(pointCloud);
+
+                const bbox = geometry.boundingBox;
+                const size = new THREE.Vector3();
+                bbox.getSize(size);
+                const maxDim = Math.max(size.x, size.y, size.z);
+                camera.position.set(0, size.y * 0.3, maxDim * 1.5);
+                controls.target.set(0, 0, 0);
+                controls.update();
+
+                console.log('Point cloud loaded. Points:', geometry.attributes.position.count);
+                document.getElementById('loading').classList.add('hidden');
+
+            } catch (err) {
+                loadingText.textContent = 'Error: ' + err.message;
+                console.error('Init error:', err);
+            }
+        }
+
+        function showModal(src) {
+            document.getElementById('img-modal-src').src = src;
+            document.getElementById('img-modal').classList.add('show');
+        }
+
+        async function loadPLYFromServer(filePath) {
+            const resp = await fetch('/api/file/' + filePath);
+            const buffer = await resp.arrayBuffer();
+
+            const loader = new THREE.PLYLoader();
+            const geometry = loader.parse(buffer);
+            geometry.computeBoundingBox();
+
+            // Center
+            const center = new THREE.Vector3();
+            geometry.boundingBox.getCenter(center);
+            geometry.translate(-center.x, -center.y, -center.z);
+
+            // Remove old
+            if (pointCloud) scene.remove(pointCloud);
+
+            const material = new THREE.PointsMaterial({
+                size: parseFloat(document.getElementById('point-size').value) * 0.001,
+                vertexColors: geometry.hasAttribute('color'),
+                sizeAttenuation: true,
+            });
+
+            pointCloud = new THREE.Points(geometry, material);
+            scene.add(pointCloud);
+
+            // Fit camera
+            const bbox = geometry.boundingBox;
+            const size = new THREE.Vector3();
+            bbox.getSize(size);
+            const maxDim = Math.max(size.x, size.y, size.z);
+            camera.position.set(0, size.y * 0.3, maxDim * 1.5);
+            controls.target.set(0, 0, 0);
+            controls.update();
+        }
+
+        // ─── PLY selector change ─────────────────────────────────────
+        document.getElementById('ply-select').addEventListener('change', async function(e) {
+            const filePath = e.target.value;
+            if (!filePath) return;
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('loading-text').textContent = 'Loading ' + filePath.split('/').pop() + '...';
+            await loadPLYFromServer(filePath);
+            document.getElementById('loading').classList.add('hidden');
+        });
+
+        // ─── Measurements display ────────────────────────────────────
+        function displayMeasurements(data) {
+            const container = document.getElementById('measurements-content');
+            let html = '';
+
+            for (const [imgName, persons] of Object.entries(data)) {
+                html += `<h2 style="font-size:13px; color:#ccc; margin-top:8px;">${imgName}</h2>`;
+
+                for (const personData of persons) {
+                    if (personData.error) {
+                        html += `<div class="flag">${personData.error}</div>`;
+                        continue;
+                    }
+
+                    const a = personData.assessment;
+                    const units = a.units || 'px';
+
+                    for (const side of ['left_leg', 'right_leg']) {
+                        const leg = a[side];
+                        if (!leg) continue;
+
+                        const label = side === 'left_leg' ? 'Left Leg' : 'Right Leg';
+                        html += `<h2>${label}</h2>`;
+                        html += row('HKA Angle', `${leg.hka_angle?.toFixed(1) || '?'}\u00B0`);
+                        html += row('Deviation', `${leg.hka_deviation?.toFixed(1) || '?'}\u00B0`);
+                        html += row('Classification', `${leg.classification || '?'} (${leg.severity || '?'})`);
+                        html += row('Femur Length', `${leg.femur_length?.toFixed(1) || '?'} ${units}`);
+                        html += row('Tibia Length', `${leg.tibia_length?.toFixed(1) || '?'} ${units}`);
+                        html += row('Total Length', `${leg.total_leg_length?.toFixed(1) || '?'} ${units}`);
+                    }
+
+                    html += `<h2>Inter-Leg</h2>`;
+                    html += row('Knee Gap', `${a.intercondylar_distance?.toFixed(1) || '?'} ${units}`);
+                    html += row('Ankle Gap', `${a.intermalleolar_distance?.toFixed(1) || '?'} ${units}`);
+                    html += row('Length Diff', `${a.leg_length_difference?.toFixed(1) || '?'} ${units}`);
+
+                    const overall = a.overall_classification || 'Unknown';
+                    const isNormal = overall.includes('Normal');
+                    html += `<div class="flag ${isNormal ? 'normal' : ''}">${overall}</div>`;
+
+                    if (a.flags && a.flags.length > 0) {
+                        for (const flag of a.flags) {
+                            html += `<div class="flag">${flag}</div>`;
+                        }
+                    }
+                }
+            }
+
+            container.innerHTML = html || '<p style="color:#666; font-size:13px;">No measurement data.</p>';
+        }
+
+        function row(label, value) {
+            return `<div class="measurement-row"><span class="label">${label}</span><span class="value">${value}</span></div>`;
+        }
+
+        // ─── Point Size Control ──────────────────────────────────────
+        document.getElementById('point-size').addEventListener('input', function(e) {
+            const val = parseFloat(e.target.value);
+            document.getElementById('point-size-val').textContent = val.toFixed(1);
+            if (pointCloud) {
+                pointCloud.material.size = val * 0.001;
+            }
+        });
+
+        // ─── Measurement Tools ───────────────────────────────────────
+        document.getElementById('btn-measure').addEventListener('click', function() {
+            if (measureMode === 'distance') { cancelMeasure(); }
+            else { cancelMeasure(); measureMode = 'distance'; this.classList.add('active'); renderer.domElement.style.cursor = 'crosshair'; }
+        });
+
+        document.getElementById('btn-angle').addEventListener('click', function() {
+            if (measureMode === 'angle') { cancelMeasure(); }
+            else { cancelMeasure(); measureMode = 'angle'; this.classList.add('active'); renderer.domElement.style.cursor = 'crosshair'; }
+        });
+
+        function cancelMeasure() {
+            measureMode = null; measurePoints = [];
+            measureMarkers.forEach(m => scene.remove(m)); measureMarkers = [];
+            measureLines.forEach(l => scene.remove(l)); measureLines = [];
+            document.querySelectorAll('.toolbar-btn').forEach(b => b.classList.remove('active'));
+            renderer.domElement.style.cursor = 'default';
+            document.getElementById('measurement-display').style.display = 'none';
+        }
+
+        function addMarker(point, color = 0xff4444) {
+            const geo = new THREE.SphereGeometry(0.005, 8, 8);
+            const mat = new THREE.MeshBasicMaterial({ color });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.copy(point);
+            scene.add(mesh); measureMarkers.push(mesh);
+        }
+
+        function addLine(p1, p2, color = 0xff4444) {
+            const geo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+            const mat = new THREE.LineBasicMaterial({ color, linewidth: 2 });
+            const line = new THREE.Line(geo, mat);
+            scene.add(line); measureLines.push(line);
+        }
+
+        renderer.domElement.addEventListener('click', function(e) {
+            if (!measureMode || !pointCloud) return;
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(pointCloud);
+            if (intersects.length === 0) return;
+
+            const point = intersects[0].point.clone();
+            measurePoints.push(point);
+            addMarker(point);
+            const display = document.getElementById('measurement-display');
+
+            if (measureMode === 'distance' && measurePoints.length === 2) {
+                const dist = measurePoints[0].distanceTo(measurePoints[1]);
+                addLine(measurePoints[0], measurePoints[1]);
+                display.textContent = `Distance: ${dist.toFixed(4)} units`;
+                display.style.display = 'block';
+                document.getElementById('interactive-measurements').innerHTML +=
+                    `<div class="measurement-row"><span class="label">Dist</span><span class="value">${dist.toFixed(4)}</span></div>`;
+                measurePoints = [];
+            }
+
+            if (measureMode === 'angle' && measurePoints.length === 3) {
+                addLine(measurePoints[0], measurePoints[1], 0x44aaff);
+                addLine(measurePoints[1], measurePoints[2], 0x44aaff);
+                const v1 = new THREE.Vector3().subVectors(measurePoints[0], measurePoints[1]);
+                const v2 = new THREE.Vector3().subVectors(measurePoints[2], measurePoints[1]);
+                const angle = THREE.MathUtils.radToDeg(v1.angleTo(v2));
+                display.textContent = `Angle: ${angle.toFixed(1)}\u00B0`;
+                display.style.display = 'block';
+                document.getElementById('interactive-measurements').innerHTML +=
+                    `<div class="measurement-row"><span class="label">Angle</span><span class="value">${angle.toFixed(1)}\u00B0</span></div>`;
+                measurePoints = [];
+            }
+        });
+
+        // ─── Other Controls ──────────────────────────────────────────
+        document.getElementById('btn-reset-view').addEventListener('click', function() {
+            camera.position.set(0, 0.5, 2); controls.target.set(0, 0, 0); controls.update();
+        });
+        document.getElementById('btn-toggle-panel').addEventListener('click', function() {
+            document.getElementById('side-panel').classList.toggle('hidden');
+        });
+        document.getElementById('btn-bg-color').addEventListener('click', function() {
+            bgIndex = (bgIndex + 1) % bgColors.length;
+            scene.background = new THREE.Color(bgColors[bgIndex]);
+        });
+
+        // ─── Resize ──────────────────────────────────────────────────
+        window.addEventListener('resize', function() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // ─── Animation Loop ──────────────────────────────────────────
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // ─── Start ───────────────────────────────────────────────────
+        init();
+    </script>
+</body>
+</html>

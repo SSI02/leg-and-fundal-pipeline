@@ -1,0 +1,44 @@
+name: pose_env
+channels:
+  - defaults
+dependencies:
+  - python=3.9
+  - pip
+  - pip:
+      # PyTorch stack — versions pinned to match mmcv prebuilt wheel index
+      - --extra-index-url https://download.pytorch.org/whl/cu118
+      - torch==2.1.0+cu118
+      - torchvision==0.16.0+cu118
+      - triton==2.1.0
+
+      # NumPy must stay <2 for the openmmlab stack;
+      # opencv-python <4.11 is the last numpy-1.x-friendly release
+      - "numpy<2"
+      - "opencv-python<4.11"
+
+      # OpenMMLab — versions pinned to a known-good compatible set
+      - --find-links https://download.openmmlab.com/mmcv/dist/cu118/torch2.1/index.html
+      - mmcv==2.1.0
+      - mmengine==0.10.7
+      - mmdet==3.3.0
+      - openmim
+
+      # Everything below is unpinned — let pip pick compatible versions
+      - addict
+      - cython
+      - json-tricks
+      - matplotlib
+      - model-index
+      - munkres
+      - pandas
+      - pillow
+      - pycocotools
+      - pyyaml
+      - requests
+      - rich
+      - scipy
+      - shapely
+      - terminaltables
+      - tqdm
+      - xtcocotools
+      - yapf
