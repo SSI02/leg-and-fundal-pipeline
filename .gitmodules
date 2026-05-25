@@ -1,0 +1,15 @@
+[submodule "repos/vggt"]
+	path = repos/vggt
+	url = https://github.com/facebookresearch/vggt.git
+[submodule "repos/4D-Humans"]
+	path = repos/4D-Humans
+	url = https://github.com/shubham-goel/4D-Humans.git
+[submodule "repos/amb3r"]
+	path = repos/amb3r
+	url = https://github.com/HengyiWang/amb3r.git
+[submodule "repos/sam3"]
+	path = repos/sam3
+	url = https://github.com/facebookresearch/sam3.git
+[submodule "repos/mmpose"]
+	path = repos/mmpose
+	url = https://github.com/open-mmlab/mmpose.git
