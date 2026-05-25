@@ -1,0 +1,163 @@
+# ─── LEG TEST WORKFLOW (3 STEPS — ALL REQUIRED) ──────────────────
+#
+# IMPORTANT: skipping step 2 falls back to multi-frame mode and gives
+# unreliable mixed/varus/valgus results. The pipeline now prints a clear
+# banner saying which mode it's in:
+#
+#   Mode:  ANTERIOR-FRAME MODE — primary classification = …   (good)
+#   Mode:  MULTI-FRAME 3D MODE (LEGACY)                       (skipped step 2)
+
+# 1. Scale calibration  — click 2 points on a known-size object, enter cm
+bash scripts/run_scale_picker.sh \
+     data/input/patient_001.mp4 \
+     data/input/patient_001_scale.json
+
+# 2. Anterior frame picker  — click the cleanest front-facing frame
+#    → opens http://127.0.0.1:8091/, writes data/input/patient_001_anterior.json
+bash scripts/run_anterior_picker.sh \
+     data/input/patient_001.mp4 \
+     data/input/patient_001_anterior.json
+
+# Quick sanity check (no jq needed):
+python -c "import json; print('Chosen frame:', json.load(open('data/input/patient_001_anterior.json'))['anterior_frame'])"
+
+# 3. Run the leg pipeline  — two equivalent ways to pass the chosen frame:
+#
+# (a) Easiest — let the script read the picker JSON for you (no jq required):
+ANTERIOR_PICKER_JSON=data/input/patient_001_anterior.json \
+SCALE_CALIB=data/input/patient_001_scale.json \
+  bash scripts/run_leg_pipeline.sh \
+       data/input/patient_001.mp4 \
+       data/output/patient_001
+
+# (b) Or pass the filename directly (look it up first):
+ANTERIOR_FRAME=$(python -c "import json; print(json.load(open('data/input/patient_001_anterior.json'))['anterior_frame'])") \
+SCALE_CALIB=data/input/patient_001_scale.json \
+  bash scripts/run_leg_pipeline.sh \
+       data/input/patient_001.mp4 \
+       data/output/patient_001
+
+# (c) Or simply hard-code it (after step 2 has told you the filename):
+# ANTERIOR_FRAME=frame_009.jpg \
+# SCALE_CALIB=data/input/patient_001_scale.json \
+#   bash scripts/run_leg_pipeline.sh \
+#        data/input/patient_001.mp4 \
+#        data/output/patient_001
+
+# View the report:  data/output/patient_001/debug/leg/anterior_assessment.jpg
+
+# ─── BALLOON TEST WORKFLOW ───────────────────────────────────────────
+
+VIDEO=data/input/balloon_001.mp4
+
+# 1. Scale calibration  (click 2 points on a known-size object, enter cm)
+bash scripts/run_scale_picker.sh \
+    "$VIDEO" \
+    data/input/balloon_001_scale.json
+# → Browser opens. Click frame_000 in sidebar, zoom in (wheel),
+#   click 2 pixels on a ruler/box edge, enter real distance in cm,
+#   click "Track to all frames", verify, close terminal with Ctrl+C.
+
+# 2. Belly seed  (1 click on the balloon, propagated)
+MODE=seed bash scripts/run_scale_picker.sh \
+    "$VIDEO" \
+    data/input/balloon_001_seed.json
+# → Browser opens in seed mode. Click on the balloon center,
+#   "Track seed to all frames", Ctrl+C.
+
+# 3. Run the pipeline
+SUBJECT=balloon \
+SCALE_CALIB=data/input/balloon_001_scale.json \
+SEED_POINTS=data/input/balloon_001_seed.json \
+  bash scripts/run_belly_pipeline.sh \
+    "$VIDEO" \
+    data/output/balloon_001
+
+
+# ─── PREGNANT WORKFLOW ───────────────────────────────────────────────
+
+VIDEO=data/input/belly_001.mp4
+
+# 1. Scale calibration (same as above)
+bash scripts/run_scale_picker.sh \
+    "$VIDEO" \
+    data/input/belly_001_scale.json
+
+# 2. Belly seed
+MODE=seed bash scripts/run_scale_picker.sh \
+    "$VIDEO" \
+    data/input/belly_001_seed.json
+
+# 3. Run pipeline (no SUBJECT means default 'pregnant', runs pose for distance-to-feet)
+SCALE_CALIB=data/input/belly_001_scale.json \
+SEED_POINTS=data/input/belly_001_seed.json \
+  bash scripts/run_belly_pipeline.sh \
+    "$VIDEO" \
+    data/output/belly_001
+
+
+# ─── INSPECT RESULTS ─────────────────────────────────────────────────
+
+OUT=data/output/balloon_001   # or belly_001
+
+# Numeric results
+cat $OUT/belly/belly_results.json | python3 -m json.tool | less
+
+# Just volumes
+cat $OUT/belly/belly_results.json | python3 -m json.tool | grep -E "volume|liters"
+
+# Open all debug visualizations at once
+xdg-open $OUT/debug/belly/ 2>/dev/null || open $OUT/debug/belly/
+
+# Or open specific ones
+xdg-open $OUT/debug/belly/belly_button_height.jpg     # top-down heatmap
+xdg-open $OUT/debug/belly/belly_button_section.jpg    # cross-sections
+xdg-open $OUT/debug/belly/belly_button_flow.jpg       # gradient flow arrows
+xdg-open $OUT/debug/belly/belly_mesh_with_plane.jpg   # mesh + back plane
+xdg-open $OUT/debug/belly/belly_button.jpg            # 3D button view
+xdg-open $OUT/debug/belly/belly_pointcloud_stats.jpg  # belly cloud stats
+
+# Also useful — see the segmentation quality:
+xdg-open $OUT/segmentation/overlays/                  # SAM3 mask overlays
+
+
+# ─── COMMON OVERRIDES (env vars) ─────────────────────────────────────
+
+# Use fewer frames (faster, less VRAM)
+N_FRAMES=15 RECON_MAX_FRAMES=10 \
+  SUBJECT=balloon SCALE_CALIB=... SEED_POINTS=... \
+  bash scripts/run_belly_pipeline.sh "$VIDEO" "$OUT"
+
+# Use AMB3R instead of VGGT
+RECON_MODEL=amb3r SUBJECT=balloon SCALE_CALIB=... SEED_POINTS=... \
+  bash scripts/run_belly_pipeline.sh "$VIDEO" "$OUT"
+
+# Force per-frame VGGT (only if batched OOMs — gives misaligned clouds)
+LOW_MEMORY=1 SUBJECT=balloon SCALE_CALIB=... SEED_POINTS=... \
+  bash scripts/run_belly_pipeline.sh "$VIDEO" "$OUT"
+
+# Override SAM3 prompt
+SAM_PROMPT=stomach SAM_FALLBACK="abdomen,torso,person" \
+  SUBJECT=pregnant SCALE_CALIB=... SEED_POINTS=... \
+  bash scripts/run_belly_pipeline.sh "$VIDEO" "$OUT"
+
+
+# ─── RE-RUN ONLY DEBUG VIZ (no need to re-run whole pipeline) ────────
+
+CONDA_BASE=$(conda info --base)
+$CONDA_BASE/envs/leg_pipeline/bin/python src/visualization/debug_viz.py \
+    --output_dir data/output/balloon_001 \
+    --image_dir data/input/balloon_001_frames \
+    --mode belly
+
+
+# ─── CLEAN UP / RESET A RUN ──────────────────────────────────────────
+
+# Delete the extracted frames (forces re-extraction)
+rm -rf data/input/balloon_001_frames
+
+# Delete a previous output to start fresh
+rm -rf data/output/balloon_001
+
+# Reset all clicks
+rm data/input/balloon_001_scale.json data/input/balloon_001_seed.json
