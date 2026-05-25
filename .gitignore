@@ -1,0 +1,119 @@
+# ────────────────────────────────────────────────────────────────────
+# Patient data / PHI — never commit
+# ────────────────────────────────────────────────────────────────────
+data/
+**/data/input/
+**/data/output/
+*_frames/
+
+# Picker click files reference patient frame filenames
+*_scale.json
+*_seed.json
+*_anterior.json
+
+# Patient / test videos
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.m4v
+*.wmv
+*.flv
+
+# ────────────────────────────────────────────────────────────────────
+# Model weights — too large for git, fetched by setup scripts
+# ────────────────────────────────────────────────────────────────────
+*.pt
+*.pth
+*.pkl
+*.ckpt
+*.safetensors
+*.bin
+*.onnx
+*.h5
+*.tflite
+checkpoints/
+weights/
+
+# 3D / reconstruction artifacts
+*.ply
+*.npz
+*.obj
+*.glb
+*.gltf
+
+# ────────────────────────────────────────────────────────────────────
+# Python
+# ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Jupyter
+.ipynb_checkpoints
+*.ipynb
+
+# Coverage / linting
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# ────────────────────────────────────────────────────────────────────
+# IDE / editor / OS
+# ────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Claude Code local state
+.claude/
+
+# ────────────────────────────────────────────────────────────────────
+# Logs / run artefacts
+# ────────────────────────────────────────────────────────────────────
+*.log
+logs/
+*.pid
+*.tmp
+nohup.out
